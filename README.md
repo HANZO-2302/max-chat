@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MAX Chat
 
-## Getting Started
+Веб-интерфейс чата для отправки и получения текстовых сообщений в мессенджере MAX через [GREEN-API](https://green-api.com/max).
 
-First, run the development server:
+**Демо:** https://max-chat-phi.vercel.app/
+
+## Возможности
+
+- Вход по `idInstance` и `apiTokenInstance` из личного кабинета GREEN-API
+- Создание чата по номеру телефона получателя (проверка через `CheckAccount`)
+- Отправка текстовых сообщений (`SendMessage`)
+- Получение ответов (`ReceiveNotification` + `DeleteNotification`, long polling)
+- Статусы сообщений (отправлено / доставлено / прочитано), счётчик непрочитанных, поиск по чатам
+- Внешний вид по мотивам web.max.ru, адаптив под мобильные
+
+## Стек
+
+Next.js (App Router), React, TypeScript, Tailwind CSS, Zustand, lucide-react.
+
+## Локальный запуск
+
+Требования: Node.js 20+ и [pnpm](https://pnpm.io/installation).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+git clone https://github.com/<твой-аккаунт>/max-chat.git
+cd max-chat
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Открой http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Продакшен-сборка:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm build
+pnpm start
+```
 
-## Learn More
+Переменные окружения не нужны.
 
-To learn more about Next.js, take a look at the following resources:
+## Как пользоваться
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. В [личном кабинете GREEN-API](https://console.green-api.com) создай инстанс MAX и авторизуй его (QR-код). Скопируй `idInstance` и `apiTokenInstance`.
+2. Введи их в форме входа. Поле `apiUrl` (в «Дополнительно») по умолчанию `https://api.green-api.com/v3`. Если в карточке инстанса указан другой адрес, впиши его.
+3. Включи получение уведомлений. Если они выключены, приложение покажет жёлтую плашку с кнопкой «Включить». Либо вручную в кабинете (Изменить инстанс): «Получать уведомления о входящих сообщениях и файлах» и «Получать уведомления о статусах отправленных сообщений». Поле «Адрес отправки уведомлений (URL)» должно быть пустым.
+4. Нажми «+», введи номер получателя (РФ `79991234567` или РБ `375291234567`) и начни чат.
+5. Отправь сообщение. Ответ с другого аккаунта MAX появится в чате через несколько секунд.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Как это работает
 
-## Deploy on Vercel
+- Запросы к GREEN-API идут напрямую из браузера. `idInstance` и токен хранятся только в `localStorage` и никуда, кроме GREEN-API, не отправляются.
+- Приём: цикл `receiveNotification` (до 5 с ожидания), затем `deleteNotification`. Уведомления дедуплицируются по `idMessage`.
+- Номер превращается в `chatId` через `CheckAccount`; `chatId` в MAX постоянный, поэтому кэшируется, повторные проверки не выполняются.
+- При ответе 429 (лимит частоты) запрос один раз повторяется через секунду.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Ограничения
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Только текстовые сообщения. Файлы, голосовые и пр. игнорируются, группы тоже.
+- Показываются только сообщения, пришедшие после входа (старая очередь за 24 часа пропускается).
+- `CheckAccount` для MAX поддерживает только номера РФ и РБ.
+- История чатов хранится локально в браузере.
+
+## Структура
+
+```
+app/            страница и layout
+components/     LoginForm, Sidebar, ChatWindow, NewChatForm, NotificationsSetup, ...
+hooks/          useReceiver (цикл приёма), useHydrated
+lib/            greenApi (клиент API), notifications (разбор уведомлений), phone, format
+store/          Zustand: useAuth, useChats
+```
